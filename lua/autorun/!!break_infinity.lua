@@ -1,6 +1,9 @@
 local t = {}
+local meta = {}
+meta.__index = t
+
 infmath = {}
-infmath.Version = "0.2"
+infmath.Version = "0.3"
 
 -- Cache values in locals for faster code execution
 local math = math
@@ -25,11 +28,17 @@ function infmath.ConvertNumberToInfNumber(number)
     return InfNumber(number)
 end
 
+function infmath.ConvertInfNumberToNormalNumber(tbl) -- temp fix for the pow functions
+    if isnumber(tbl) then return tbl end
+    return tbl.mantissa * 10^tbl.exponent
+end
+
 -- Placeholder values
 t.mantissa = 0
 t.exponent = 0
 
 local ConvertNumberToInfNumber = infmath.ConvertNumberToInfNumber
+local ConvertInfNumberToNormalNumber = infmath.ConvertInfNumberToNormalNumber
 
 local function FixMantissa(self) -- Just in case.
     if !istable(self) then return end
@@ -62,6 +71,7 @@ t.FormatText = function(self) -- Use Scientific notation
 end
 
 t.add = function(self, tbl)
+    self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
 
 
@@ -70,8 +80,10 @@ t.add = function(self, tbl)
     FixMantissa(self)
     return self
 end
+meta.__add = t.add
 
 t.sub = function(self, tbl)
+    self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
 
 
@@ -80,8 +92,10 @@ t.sub = function(self, tbl)
     FixMantissa(self)
     return self
 end
+meta.__sub = t.sub
 
 t.mul = function(self, tbl) -- Multiply
+    self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
 
     local exponent = self.exponent
@@ -91,8 +105,10 @@ t.mul = function(self, tbl) -- Multiply
     FixMantissa(self)
     return self
 end
+meta.__mul = t.mul
 
 t.div = function(self, tbl) -- Multiply
+    self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
 
     local exponent = self.exponent
@@ -102,69 +118,101 @@ t.div = function(self, tbl) -- Multiply
     FixMantissa(self)
     return self
 end
+meta.__div = t.div
 
-t.pow = function(self, number) -- Power (normal numbers only, plus its very complicated)
-    -- tbl = ConvertNumberToInfNumber(tbl)
+t.pow = function(self, tbl) -- Power (normal numbers only, very complicated to code)
+    self = ConvertNumberToInfNumber(self)
+    tbl = ConvertNumberToInfNumber(tbl)
 
-
+/*
     local man = self.mantissa
     local exp = self.exponent
     for i=1,math_ceil(math_min(number-1, 1e3)) do
         self.mantissa = self.mantissa * man--^math_min(number-i, number)
-        if exp > 1 then
-            self.exponent = self.exponent * exp
-        end
+        self.exponent = self.exponent + exp
         FixMantissa(self)
         if self.exponent == math_huge then break end
     end
-
-/*
-    self.mantissa = self.mantissa ^ tbl.mantissa
-    -- self.exponent = math_floor(math_log10(self.mantissa))
-    self.exponent = self.exponent ^ math_max(1, tbl.exponent)
-    FixMantissa(self)
 */
+/*
+    local m = InfNumber(self.mantissa)
+    m = m * tbl
+    self.exponent = self.exponent + m.exponent
+    m.exponent = 0
+*/
+    self.mantissa = self.mantissa ^ ConvertInfNumberToNormalNumber(tbl)
+    self.exponent = (math_max(1, self.exponent))*ConvertInfNumberToNormalNumber(tbl)
+    FixMantissa(self)
+
     return self
 end
+meta.__pow = t.pow
 
 t.tet = function(self, number) -- Tetration (normal numbers! far more complicated than pow function)
     local exponent = self.exponent
     -- Assume it's just a tetration as at very high numbers it would barely affect the exponent.. Dunno how to write a function for tetration without making the code lag.
-    -- self.mantissa = self.mantissa ^ number
-    -- self.exponent = self.exponent ^ number
+    self.mantissa = self.mantissa ^ number
+    self.exponent = self.exponent ^ number
+    FixMantissa(self)
     -- Alt function, but is more expensive:
+--[[
     for i=1,math_ceil(math_min(number, 1e3)) do
         self.mantissa = self.mantissa ^ number^math_min(number-i, number) -- Assume it's just a tetration as at very high numbers it would barely affect the exponent.. Dunno how to write a function for tetration without making the code lag.
         self.exponent = self.exponent * number
         FixMantissa(self)
         if self.exponent == math_huge then break end
     end
-
+]]
 end
 
-t.lessthan = function(self, tbl)
+t.eq = function(self, tbl)
+    self = ConvertNumberToInfNumber(self)
+    tbl = ConvertNumberToInfNumber(tbl)
+
+    return self.mantissa == tbl.mantissa and self.exponent == tbl.exponent
+end
+meta.__eq = t.eq
+
+t.lt = function(self, tbl)
+    self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
 
     -- return (self.exponent + math_log10(self.mantissa)) < (tbl.exponent + math_log10(tbl.mantissa))
     return self:log10() < tbl:log10() -- can use log10 directly though
 end
+meta.__lt = t.lt
+
+t.le = function(self, tbl)
+    self = ConvertNumberToInfNumber(self)
+    tbl = ConvertNumberToInfNumber(tbl)
+
+    return self.exponent < tbl.exponent or self:log10() <= tbl:log10()
+end
+meta.__le = t.le
 
 t.morethan = function(self, tbl)
+    self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
     -- return (self.exponent + math_log10(self.mantissa)) > (tbl.exponent + math_log10(tbl.mantissa))
     return self:log10() > tbl:log10()
 end
 
-RegisterMetaTable("BreakInfinity", t) -- i don't know how to use this
-local meta = FindMetaTable("BreakInfinity")
+-- RegisterMetaTable("BreakInfinity", t) -- i don't know how to use this
+-- local meta = FindMetaTable("BreakInfinity")
+-- TYPE_BREAKINFINITY = meta.MetaID
 
-TYPE_BREAKINFINITY = meta.MetaID
+function t:Create(n)
+  local base = {}
+  base = setmetatable(base, meta)
+  return base
+end
 
 -- Repeatedly calling this function multiple times may impact the performance.
 function InfNumber(mantissa, exponent)
     mantissa = mantissa or 0
     exponent = exponent or 0
-    local tbl = table.Copy(t)
+    -- local tbl = table.Copy(t)
+    local tbl = t:Create()
     -- print(setmetatable(tbl, meta))
     -- print(type(tbl))
 
@@ -206,19 +254,27 @@ end
 
 
 print("Break Infinity v"..infmath.Version.." loaded and initialized!")
-print("Break Infinity MetaTable Type: "..TYPE_BREAKINFINITY)
+-- print("Break Infinity MetaTable Type: "..TYPE_BREAKINFINITY)
 
 -- Same as net.WriteTable and net.ReadTable, but with small differences to make it a bit optimized
 function net.WriteInfNumber(tbl)
     tbl = ConvertNumberToInfNumber(tbl)
+
+    net.WriteDouble(tbl.mantissa)
+    net.WriteDouble(tbl.exponent)
+--[[
     net.WriteTable({
         mantissa = tbl.mantissa,
         exponent = tbl.exponent,
     })
+]]
 end
 
 function net.ReadInfNumber()
-    local t = net.ReadTable()
+    local t = {
+        mantissa = net.ReadDouble(),
+        exponent = net.ReadDouble(),
+    }
     return InfNumber(t.mantissa, t.exponent)
 end
 
@@ -228,7 +284,7 @@ concommand.Add("breakinfinity_testincrement_add", function()
     local n = InfNumber(1, 0)
     print(n:FormatText())
     timer.Create(handler, 0, 0, function()
-        n:add(n)
+        n = n + n
         print(n:FormatText())
     end)
 end)
@@ -236,7 +292,7 @@ concommand.Add("breakinfinity_testincrement_mul", function()
     local n = InfNumber(2, 0)
     print(n:FormatText())
     timer.Create(handler, 0, 0, function()
-        n:mul(n)
+        n = n * n
         print(n:FormatText())
     end)
 end)
@@ -244,7 +300,7 @@ concommand.Add("breakinfinity_testincrement_pow", function()
     local n = InfNumber(2, 0)
     print(n:FormatText())
     timer.Create(handler, 0, 0, function()
-        n:pow(3)
+        n = n ^ 3
         print(n:FormatText())
     end)
 end)
@@ -255,69 +311,56 @@ end)
 
 concommand.Add("breakinfinity_testincrement_test", function()
     local t = 0
+    local test = 0
 
 
     t = t + 1
     print("Test "..t..": 1.62e800+6.66e799")
-    local test = InfNumber(1.62, 800)
-    test:add(InfNumber(6.66, 799))
+    local test = InfNumber(1.62, 800) + InfNumber(6.66, 799)
     print(test:FormatText())
     
     t = t + 1
     print("Test "..t..": "..MAX_NUMBER_mantissa.."e"..MAX_NUMBER_exponent.."*"..MAX_NUMBER_mantissa.."e"..MAX_NUMBER_exponent)
-    local test = InfNumber(MAX_NUMBER_mantissa, MAX_NUMBER_exponent)
-    test:mul(InfNumber(MAX_NUMBER_mantissa, MAX_NUMBER_exponent))
+    local test = InfNumber(MAX_NUMBER_mantissa, MAX_NUMBER_exponent)*InfNumber(MAX_NUMBER_mantissa, MAX_NUMBER_exponent)
     print(test:FormatText())
 
     t = t + 1
     print("Test "..t..": 1.79e308^30")
-    local test = InfNumber(MAX_NUMBER_mantissa, MAX_NUMBER_exponent)
-    test:pow(30)
+    local test = InfNumber(MAX_NUMBER_mantissa, MAX_NUMBER_exponent)^30
     print(test:FormatText())
 
     t = t + 1
-    print("Test "..t..": 400^^10")
-    local test = InfNumber(4, 2)
-    test:tet(10)
-    print(test:FormatText())
-
-    t = t + 1
-    print("Test "..t..": 400^^1000")
-    local test = InfNumber(4, 2)
-    test:tet(1000)
+    print("Test "..t..": 10^^2")
+    local test = InfNumber(4, 2) test:tet(2) -- how do i use this lol
     print(test:FormatText())
 
     t = t + 1
     print("Test "..t..": 1.62e800-6.66e799")
-    local test = InfNumber(1.62, 800)
-    test:sub(InfNumber(6.66, 799))
+    local test = InfNumber(1.62, 800) - InfNumber(6.66, 799)
     print(test:FormatText())
 
     t = t + 1
     print("Test "..t..": 1.62e800/6.66e799")
-    local test = InfNumber(1.62, 800)
-    test:div(InfNumber(6.66, 799))
+    local test = InfNumber(1.62, 800) / InfNumber(6.66, 799)
     print(test:FormatText())
 
     t = t + 1
     print("Test "..t..": 1.62e80/6.66e799")
-    local test = InfNumber(1.62, 80)
-    test:div(InfNumber(6.66, 799))
+    local test = InfNumber(1.62, 80) / InfNumber(6.66, 799)
     print(test:FormatText())
 
     t = t + 1
-    print("Test "..t..": 4.20e-69^1000")
-    local test = InfNumber(4.20, -69)
-    test:pow(5)
+    print("Test "..t..": 4.20e-69^5")
+    local test = InfNumber(4.20, -69) ^ 5
     print(test:FormatText())
 
     t = t + 1
     print("Test "..t..": 4.20e609<1e100")
-    local test = InfNumber(4.20, 609)
-    print(test:lessthan(InfNumber(1, 100)))
+    local test = InfNumber(4.20, 609) < InfNumber(1, 100)
+    print(test)
 
     t = t + 1
     print("Test "..t..": 4.20e609<1e1000")
-    local test = InfNumber(4.20, 609)
-    print(test:lessthan(InfNumber(1, 1000)))
+    local test = InfNumber(4.20, 609) < InfNumber(1, 1000)
+    print(test)
 end)

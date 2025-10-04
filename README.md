@@ -10,14 +10,20 @@ This addon uses a metatable "BreakInfinity" with 2 values: mantissa and exponent
 
 
 BreakInfinity table also includes functions such as:
-- add: add value to the number from another number
-- sub: substracts (opposite of add)
-- mul: multiply the number by another number
-- div: divides the number (opposite of mul)
-- pow: powers the number by a specified number (mantissa^mantissa, exponent * exponent)
+- (+) add: add value to the number from another number
+- (-) sub: substracts (opposite of add)
+- (*) mul: multiply the number by another number
+- (/) div: divides the number (opposite of mul)
+- (^) pow: powers the number by a specified number
 - log10: logarithm of 10, equal to exponent + log10(mantissa)
 - log: logarithm of x, equal to (exponent + log10(mantissa)) / log(x)
 
+Other functions:
+- (==) eq: checks if mantissa and exponent are equal to the opposing number 
+- (<) lt: checks if numbers if lower than the opposing number, checks if log10 of the number is less than the log10 of the opposing number
+- (<=) le: Funcions same as eq and lt above, except it returns true from ONE of those functions
+- (>): Opposite of (<)
+- (>=): Opposite of (<=)
 
 
 
@@ -29,7 +35,7 @@ Maybe in the future...
 # Other notes:
 - THIS ADDON DOES NOTHING BY ITSELF ALONE! (If you feel like it, you can make a nice script with this addon. Options are very limited, though.)
 - Tested on gmod with 64-bit binaries. I do not guarantee any functionality on 32-bit gmod!
-
+- The functions specified in "Other functions" list only works if both values are the same (metatable) type! Otherwise ==> Error!
 
 # Support:
 - Numbers past 1.79e308: Yes
@@ -41,3 +47,8 @@ Maybe in the future...
 - [Antimatter Dimensions](https://ivark.github.io/AntimatterDimensions) by Hevipelle
 - [Omega Layers](https://veprogames.github.io/omega-layers) by VeproGames
 - [Revolution Idle](https://store.steampowered.com/app/2763740/Revolution_Idle) by Nu Games & Oni Gaming
+
+# Credits:
+@Uklejamini357 - Making the Break Infinity code
+@Toy323 - For helping me with the code along with learning the metatables
+
