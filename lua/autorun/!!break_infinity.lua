@@ -1,40 +1,49 @@
 local t = {}
 infmath = {}
-infmath.Version = "0.1"
+infmath.Version = "0.2"
 
+-- Cache values in locals for faster code execution
 local math = math
 local math_floor = math.floor
 local math_Round = math.Round
+local math_ceil = math.ceil
 local math_log10 = math.log10
+local math_min = math.min
 local math_max = math.max
+local math_abs = math.abs
+local math_exp = math.exp
+local math_huge = math.huge
+local tonumber = tonumber
 
 local MAX_NUMBER = 1.7976931348623e308
 local MAX_NUMBER_mantissa = 1.7976931348623
 local MAX_NUMBER_exponent = 308
 
+-- infmath
+function infmath.ConvertNumberToInfNumber(number)
+    if istable(number) then return number end
+    return InfNumber(number)
+end
+
 -- Placeholder values
 t.mantissa = 0
 t.exponent = 0
 
-local function ConvertNumberToInfNumber(number) -- Just in case.
-    if istable(number) then return number end
-
-    return InfNumber(number)
-end
+local ConvertNumberToInfNumber = infmath.ConvertNumberToInfNumber
 
 local function FixMantissa(self) -- Just in case.
     if !istable(self) then return end
 
-    -- local m = self.mantissa
-    if self.mantissa == math.huge then
-        self.mantissa = MAX_NUMBER_mantissa
+    local m = self.mantissa
+    if m == math_huge then
+        m = MAX_NUMBER_mantissa
         self.exponent = self.exponent + MAX_NUMBER_exponent
-    elseif self.mantissa >= 10 or self.mantissa < 1 then
+    elseif m >= 10 or m < 1 then
         local e = math_floor(math_log10(self.mantissa))
-        self.mantissa = self.mantissa / (10^e)
+        m = m / (10^e)
         self.exponent = self.exponent + e
     end
-    -- self.mantissa = m
+    self.mantissa = m
 
     return self
 end
@@ -49,7 +58,7 @@ t.FormatText = function(self) -- Use Scientific notation
     local e = self.exponent
     local e_negative = e < 0
     return e > -2 and e < 9 and self.mantissa * 10^e or
-    math_Round(self.mantissa, 2).."e"..(math.abs(e) >= 1e9 and "e"..math_Round(math_log10(math.abs(e))*(e_negative and -1 or 1), 2) or e)
+    math_Round(self.mantissa, 2).."e"..(math_abs(e) >= 1e9 and "e"..math_Round(math_log10(math_abs(e))*(e_negative and -1 or 1), 2) or e)
 end
 
 t.add = function(self, tbl)
@@ -100,18 +109,18 @@ t.pow = function(self, number) -- Power (normal numbers only, plus its very comp
 
     local man = self.mantissa
     local exp = self.exponent
-    for i=1,math.ceil(math.min(number-1, 1e3)) do
-        self.mantissa = self.mantissa * man--^math.min(number-i, number)
+    for i=1,math_ceil(math_min(number-1, 1e3)) do
+        self.mantissa = self.mantissa * man--^math_min(number-i, number)
         if exp > 1 then
             self.exponent = self.exponent * exp
         end
         FixMantissa(self)
-        if self.exponent == math.huge then break end
+        if self.exponent == math_huge then break end
     end
 
 /*
     self.mantissa = self.mantissa ^ tbl.mantissa
-    -- self.exponent = math.floor(math_log10(self.mantissa))
+    -- self.exponent = math_floor(math_log10(self.mantissa))
     self.exponent = self.exponent ^ math_max(1, tbl.exponent)
     FixMantissa(self)
 */
@@ -124,11 +133,11 @@ t.tet = function(self, number) -- Tetration (normal numbers! far more complicate
     -- self.mantissa = self.mantissa ^ number
     -- self.exponent = self.exponent ^ number
     -- Alt function, but is more expensive:
-    for i=1,math.ceil(math.min(number, 1e3)) do
-        self.mantissa = self.mantissa ^ number^math.min(number-i, number) -- Assume it's just a tetration as at very high numbers it would barely affect the exponent.. Dunno how to write a function for tetration without making the code lag.
+    for i=1,math_ceil(math_min(number, 1e3)) do
+        self.mantissa = self.mantissa ^ number^math_min(number-i, number) -- Assume it's just a tetration as at very high numbers it would barely affect the exponent.. Dunno how to write a function for tetration without making the code lag.
         self.exponent = self.exponent * number
         FixMantissa(self)
-        if self.exponent == math.huge then break end
+        if self.exponent == math_huge then break end
     end
 
 end
@@ -153,13 +162,13 @@ TYPE_BREAKINFINITY = meta.MetaID
 
 -- Repeatedly calling this function multiple times may impact the performance.
 function InfNumber(mantissa, exponent)
-    if !mantissa then mantissa = 0 end
-    if !exponent then exponent = 0 end
+    mantissa = mantissa or 0
+    exponent = exponent or 0
     local tbl = table.Copy(t)
     -- print(setmetatable(tbl, meta))
     -- print(type(tbl))
 
-    if mantissa == math.huge then
+    if mantissa == math_huge then
         mantissa = MAX_NUMBER_mantissa
         exponent = exponent + MAX_NUMBER_exponent
     elseif mantissa >= 10 or mantissa < 1 then
@@ -188,7 +197,7 @@ end
 infmath.FormatText = t.FormatText
 
 infmath.exp = function(x)
-    local t = InfNumber(math.exp(1))
+    local t = InfNumber(math_exp(1))
     t:pow(x)
 
     return t
