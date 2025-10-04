@@ -57,6 +57,22 @@ local function FixMantissa(self) -- Just in case.
     return self
 end
 
+local function FixExponent(self) -- Just in case.
+    if !istable(self) then return end
+
+    if self.exponent ~= math_floor(self.exponent) then
+        self.mantissa = self.mantissa * 10^(self.exponent - math.floor(self.exponent))
+        self.exponent = self.exponent - (self.exponent - math.floor(self.exponent))
+    end
+
+    return self
+end
+
+local function FixMantissaExponent(self)
+    FixMantissa(self)
+    FixExponent(self)
+end
+
 t.log = function(self, x)
     return (math_log10(self.mantissa) + self.exponent) / math_log10(x)
 end
@@ -77,7 +93,7 @@ t.add = function(self, tbl)
 
     self.mantissa = self.mantissa + tbl.mantissa/(10^(self.exponent-tbl.exponent))
     
-    FixMantissa(self)
+    FixMantissaExponent(self)
     return self
 end
 meta.__add = t.add
@@ -89,7 +105,7 @@ t.sub = function(self, tbl)
 
     self.mantissa = self.mantissa - tbl.mantissa/(10^(self.exponent-tbl.exponent))
     
-    FixMantissa(self)
+    FixMantissaExponent(self)
     return self
 end
 meta.__sub = t.sub
@@ -102,7 +118,7 @@ t.mul = function(self, tbl) -- Multiply
     self.mantissa = self.mantissa * tbl.mantissa
     self.exponent = self.exponent + tbl.exponent
 
-    FixMantissa(self)
+    FixMantissaExponent(self)
     return self
 end
 meta.__mul = t.mul
@@ -115,7 +131,7 @@ t.div = function(self, tbl) -- Multiply
     self.mantissa = self.mantissa / tbl.mantissa
     self.exponent = self.exponent - tbl.exponent
 
-    FixMantissa(self)
+    FixMantissaExponent(self)
     return self
 end
 meta.__div = t.div
@@ -130,7 +146,7 @@ t.pow = function(self, tbl) -- Power (normal numbers only, very complicated to c
     for i=1,math_ceil(math_min(number-1, 1e3)) do
         self.mantissa = self.mantissa * man--^math_min(number-i, number)
         self.exponent = self.exponent + exp
-        FixMantissa(self)
+        FixMantissaExponent(self)
         if self.exponent == math_huge then break end
     end
 */
@@ -141,8 +157,8 @@ t.pow = function(self, tbl) -- Power (normal numbers only, very complicated to c
     m.exponent = 0
 */
     self.mantissa = self.mantissa ^ ConvertInfNumberToNormalNumber(tbl)
-    self.exponent = (math_max(1, self.exponent))*ConvertInfNumberToNormalNumber(tbl)
-    FixMantissa(self)
+    self.exponent = (self.exponent)*ConvertInfNumberToNormalNumber(tbl)
+    FixMantissaExponent(self)
 
     return self
 end
@@ -153,13 +169,13 @@ t.tet = function(self, number) -- Tetration (normal numbers! far more complicate
     -- Assume it's just a tetration as at very high numbers it would barely affect the exponent.. Dunno how to write a function for tetration without making the code lag.
     self.mantissa = self.mantissa ^ number
     self.exponent = self.exponent ^ number
-    FixMantissa(self)
+    FixMantissaExponent(self)
     -- Alt function, but is more expensive:
 --[[
     for i=1,math_ceil(math_min(number, 1e3)) do
         self.mantissa = self.mantissa ^ number^math_min(number-i, number) -- Assume it's just a tetration as at very high numbers it would barely affect the exponent.. Dunno how to write a function for tetration without making the code lag.
         self.exponent = self.exponent * number
-        FixMantissa(self)
+        FixMantissaExponent(self)
         if self.exponent == math_huge then break end
     end
 ]]
@@ -276,6 +292,13 @@ function net.ReadInfNumber()
         exponent = net.ReadDouble(),
     }
     return InfNumber(t.mantissa, t.exponent)
+end
+
+local m = FindMetaTable("CTakeDamageInfo")
+
+m.old_SetDamage = m.old_SetDamage or m.SetDamage
+m.SetDamage = function(self, tbl)
+    self:old_SetDamage(ConvertInfNumberToNormalNumber(tbl))
 end
 
 if SERVER then return end

@@ -49,6 +49,6 @@ Maybe in the future...
 - [Revolution Idle](https://store.steampowered.com/app/2763740/Revolution_Idle) by Nu Games & Oni Gaming
 
 # Credits:
-@Uklejamini357 - Making the Break Infinity code
-@Toy323 - For helping me with the code along with learning the metatables
+- @Uklejamini357 - Making the Break Infinity code
+- @Toy323 - For helping me with the code along with learning the metatables
 
