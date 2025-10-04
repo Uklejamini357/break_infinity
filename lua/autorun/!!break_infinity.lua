@@ -61,8 +61,8 @@ local function FixExponent(self) -- Just in case.
     if !istable(self) then return end
 
     if self.exponent ~= math_floor(self.exponent) then
-        self.mantissa = self.mantissa * 10^(self.exponent - math.floor(self.exponent))
-        self.exponent = self.exponent - (self.exponent - math.floor(self.exponent))
+        self.mantissa = self.mantissa * 10^(self.exponent - math_floor(self.exponent))
+        self.exponent = self.exponent - (self.exponent - math_floor(self.exponent))
     end
 
     return self
