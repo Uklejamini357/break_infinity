@@ -79,11 +79,11 @@ end
 t.log10 = function(self)
     return math_log10(self.mantissa) + self.exponent
 end
-t.FormatText = function(self) -- Use Scientific notation
+t.FormatText = function(self, roundto) -- Use Scientific notation
     local e = self.exponent
     local e_negative = e < 0
     return e > -2 and e < 9 and self.mantissa * 10^e or
-    math_Round(self.mantissa, 2).."e"..(math_abs(e) >= 1e9 and "e"..math_Round(math_log10(math_abs(e))*(e_negative and -1 or 1), 2) or e)
+    math_Round(self.mantissa, roundto or 14).."e"..(e_negative and "-" or "+")..(math_abs(e) >= 1e9 and "e"..math_Round(math_log10(math_abs(e)), 2) or math.abs(e))
 end
 
 t.add = function(self, tbl)
