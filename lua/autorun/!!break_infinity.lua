@@ -3,7 +3,7 @@ local meta = {}
 meta.__index = t
 
 infmath = {}
-infmath.Version = "0.3"
+infmath.Version = "0.4"
 
 -- Cache values in locals for faster code execution
 local math = math
@@ -140,22 +140,6 @@ t.pow = function(self, tbl) -- Power (normal numbers only, very complicated to c
     self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
 
-/*
-    local man = self.mantissa
-    local exp = self.exponent
-    for i=1,math_ceil(math_min(number-1, 1e3)) do
-        self.mantissa = self.mantissa * man--^math_min(number-i, number)
-        self.exponent = self.exponent + exp
-        FixMantissaExponent(self)
-        if self.exponent == math_huge then break end
-    end
-*/
-/*
-    local m = InfNumber(self.mantissa)
-    m = m * tbl
-    self.exponent = self.exponent + m.exponent
-    m.exponent = 0
-*/
     self.mantissa = self.mantissa ^ ConvertInfNumberToNormalNumber(tbl)
     self.exponent = (self.exponent)*ConvertInfNumberToNormalNumber(tbl)
     FixMantissaExponent(self)
@@ -165,20 +149,16 @@ end
 meta.__pow = t.pow
 
 t.tet = function(self, number) -- Tetration (normal numbers! far more complicated than pow function)
-    local exponent = self.exponent
-    -- Assume it's just a tetration as at very high numbers it would barely affect the exponent.. Dunno how to write a function for tetration without making the code lag.
-    self.mantissa = self.mantissa ^ number
-    self.exponent = self.exponent ^ number
-    FixMantissaExponent(self)
-    -- Alt function, but is more expensive:
---[[
-    for i=1,math_ceil(math_min(number, 1e3)) do
-        self.mantissa = self.mantissa ^ number^math_min(number-i, number) -- Assume it's just a tetration as at very high numbers it would barely affect the exponent.. Dunno how to write a function for tetration without making the code lag.
-        self.exponent = self.exponent * number
+    local original_number = InfNumber(self.mantissa, self.exponent)
+    for i=1,math_ceil(math_min(number-1, 100)) do
+        local c = math.min(1, number-i)
+
+        self = original_number^self -- HOW DOES THIS WORK!?!?!?
+        -- print(self:FormatText(), original_number:FormatText())
+
         FixMantissaExponent(self)
         if self.exponent == math_huge then break end
     end
-]]
 end
 
 t.eq = function(self, tbl)
@@ -206,16 +186,9 @@ t.le = function(self, tbl)
 end
 meta.__le = t.le
 
-t.morethan = function(self, tbl)
-    self = ConvertNumberToInfNumber(self)
-    tbl = ConvertNumberToInfNumber(tbl)
-    -- return (self.exponent + math_log10(self.mantissa)) > (tbl.exponent + math_log10(tbl.mantissa))
-    return self:log10() > tbl:log10()
-end
-
--- RegisterMetaTable("BreakInfinity", t) -- i don't know how to use this
--- local meta = FindMetaTable("BreakInfinity")
--- TYPE_BREAKINFINITY = meta.MetaID
+-- RegisterMetaTable("InfNumber", t) -- i don't know how to use this
+-- local meta = FindMetaTable("InfNumber")
+-- TYPE_INFNUMBER = meta.MetaID
 
 function t:Create(n)
   local base = {}
@@ -270,7 +243,7 @@ end
 
 
 print("Break Infinity v"..infmath.Version.." loaded and initialized!")
--- print("Break Infinity MetaTable Type: "..TYPE_BREAKINFINITY)
+-- print("Break Infinity MetaTable Type: "..TYPE_INFNUMBER)
 
 -- Same as net.WriteTable and net.ReadTable, but with small differences to make it a bit optimized
 function net.WriteInfNumber(tbl)
@@ -303,34 +276,59 @@ end
 
 if SERVER then return end
 local handler = "BREAKINF.TestIncrement"
+local n
 concommand.Add("breakinfinity_testincrement_add", function()
-    local n = InfNumber(1, 0)
+    n = InfNumber(1, 0)
     print(n:FormatText())
     timer.Create(handler, 0, 0, function()
         n = n + n
         print(n:FormatText())
+        if n.exponent == math_huge then timer.Remove(handler) end
     end)
 end)
 concommand.Add("breakinfinity_testincrement_mul", function()
-    local n = InfNumber(2, 0)
+    n = InfNumber(2, 0)
     print(n:FormatText())
     timer.Create(handler, 0, 0, function()
         n = n * n
         print(n:FormatText())
+        if n.exponent == math_huge then timer.Remove(handler) end
     end)
 end)
-concommand.Add("breakinfinity_testincrement_pow", function()
-    local n = InfNumber(2, 0)
+concommand.Add("breakinfinity_testincrement_pow", function(_, _, args)
+    n = InfNumber(2, 0)
     print(n:FormatText())
     timer.Create(handler, 0, 0, function()
-        n = n ^ 3
+        n = n ^ (tonumber(args[1]) or 2)
         print(n:FormatText())
+        if n.exponent == math_huge then timer.Remove(handler) end
+    end)
+end)
+concommand.Add("breakinfinity_testincrement_tet", function(_, _, args)
+    n = InfNumber(2, 0)
+    print(n:FormatText())
+    timer.Create(handler, 0, 0, function()
+        n:tet(tonumber(args[1]) or 2)
+        print(n:FormatText())
+        if n.exponent == math_huge then timer.Remove(handler) end
     end)
 end)
 
 concommand.Add("breakinfinity_testincrement_stop", function()
     timer.Remove(handler)
 end)
+
+concommand.Add("breakinfinity_testincrement_increase", function(_, _, args)
+    n = InfNumber(1, 0)
+
+    print(n:FormatText())
+    timer.Create(handler, 0, 0, function()
+        n = ((n*n)^2)+1
+        print(n:FormatText())
+        if n.exponent == math_huge then timer.Remove(handler) end
+    end)
+end)
+
 
 concommand.Add("breakinfinity_testincrement_test", function()
     local t = 0
@@ -354,7 +352,17 @@ concommand.Add("breakinfinity_testincrement_test", function()
 
     t = t + 1
     print("Test "..t..": 10^^2")
-    local test = InfNumber(4, 2) test:tet(2) -- how do i use this lol
+    local test = InfNumber(1, 1) test:tet(2) -- how do i use this lol
+    print(test:FormatText())
+
+    t = t + 1
+    print("Test "..t..": 10^^3")
+    local test = InfNumber(1, 1) test:tet(3)
+    print(test:FormatText())
+
+    t = t + 1
+    print("Test "..t..": 10^^4")
+    local test = InfNumber(1, 1) test:tet(4)
     print(test:FormatText())
 
     t = t + 1
