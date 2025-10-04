@@ -1,7 +1,7 @@
 ## BREAKING INFINITY IN GMOD! (Go up to beyond 1.79e308!)
-### Notice: This is in BETA! This addon may not function properly
+### Notice: This is in BETA! This addon may still have bugs.
 
-Ever thought of wondering how you could go further than the 1.79e308 limit on double-float precision numbers? Now there is! With a highly complex code...
+Ever thought of wondering how you could go further than the 1.79e308 limit on double-float precision numbers? Now there is! With a complex code and...
 
 
 This addon uses a metatable "BreakInfinity" with 2 values: mantissa and exponent.
