@@ -1,12 +1,12 @@
-# BREAKING INFINITY IN GMOD! (Go up to beyond 1.79e308!)
+## BREAKING INFINITY IN GMOD! (Go up to beyond 1.79e308!)
+### Notice: This is in BETA! This addon may not function properly
 
-Ever thought of wondering how you could go further than the 1.79e308 limit on double-float precision numbers?
-Now there is! With a highly complex code...
+Ever thought of wondering how you could go further than the 1.79e308 limit on double-float precision numbers? Now there is! With a highly complex code...
 
 
-This addon uses a metatable "BreakInfinity" with 2 values: mantissa, exponent
-mantissa is generally a number which is used as a multiplier to 10^x
-exponent is technically a "10 powered to exponent" (such as 10^x, 10^308, 10^1000, etc.)
+This addon uses a metatable "BreakInfinity" with 2 values: mantissa and exponent.
+- mantissa is generally a number which is used as a multiplier to 10^x
+- exponent is technically a "10 powered to exponent" (such as 10^x, 10^308, 10^1000, etc.)
 
 
 BreakInfinity table also includes functions such as:
@@ -19,12 +19,15 @@ BreakInfinity table also includes functions such as:
 - log: logarithm of x, equal to (exponent + log10(mantissa)) / log(x)
 
 
-No one has ever made this addon before on this game, might as well as be the first one to be made on gmod lua
+
+
+No one has ever made this addon before on this game, might as well as be the first one to be made on gmod lua.
 But what if there was Break Eternity in gmod? (1e1.8e308 and beyond, maybe even 10^^308 and up to 10^^1.79e308)
 
+Maybe in the future...
+
 # Other notes:
-- NOTE THAT THIS ADDON DOES NOTHING BY ITSELF ALONE! (If you feel like it, you can make a nice script with this addon.)
-- Plus, I don't care if you reupload the addon or if you include it in a gamemode. My code from this addon can be reuploaded, modified etc.
+- THIS ADDON DOES NOTHING BY ITSELF ALONE! (If you feel like it, you can make a nice script with this addon. Options are very limited, though.)
 - Tested on gmod with 64-bit binaries. I do not guarantee any functionality on 32-bit gmod!
 
 
@@ -35,6 +38,6 @@ But what if there was Break Eternity in gmod? (1e1.8e308 and beyond, maybe even 
 
 
 # Inspirations:
-- Antimatter Dimensions (https://ivark.github.io/AntimatterDimensions)
-- Omega Layers (https://veprogames.github.io/omega-layers)
-- Revolution Idle (https://store.steampowered.com/app/2763740/Revolution_Idle)
+- [Antimatter Dimensions](https://ivark.github.io/AntimatterDimensions) by Hevipelle
+- [Omega Layers](https://veprogames.github.io/omega-layers) by VeproGames
+- [Revolution Idle](https://store.steampowered.com/app/2763740/Revolution_Idle) by Nu Games & Oni Gaming
