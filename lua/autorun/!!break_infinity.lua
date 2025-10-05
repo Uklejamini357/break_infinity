@@ -1,19 +1,37 @@
 local t = {}
 local meta = {}
 meta.__index = t
-
+meta.__tostring = function(t)
+    return t:FormatText()
+end
+-- global
 infmath = {}
-infmath.Version = "0.5"
+infmath.Version = "0.6"
 infmath.pow_useloop = CreateConVar("infmath_pow_useloop", "0", FCVAR_ARCHIVE + FCVAR_REPLICATED, "Use the loops for power function to determine a more precise? Warning: Has a significant impact on performance."):GetBool()
 cvars.AddChangeCallback("infmath_pow_useloop", function(cvar, old, new)
     infmath.pow_useloop = tobool(new)
+    if SERVER then
+        BroadcastLua([[infmath.pow_useloop = ]]..tostring(infmath.pow_useloop))
+    end
 end, "infmath_pow_useloop")
+infmath.usealtnotation = CreateConVar("infmath_usealtnotation", "0", FCVAR_ARCHIVE + FCVAR_REPLICATED, "Use the loops for power function to determine a more precise? Warning: Has a significant impact on performance."):GetBool()
+cvars.AddChangeCallback("infmath_usealtnotation", function(cvar, old, new)
+    infmath.usealtnotation = tobool(new)
+    BroadcastLua([[infmath.usealtnotation = ]]..tostring(infmath.usealtnotation))
+end, "infmath_usealtnotation")
+
+local istable = istable
+function isinfnumber(t)
+    return tobool(istable(t) and isnumber(t.mantissa) and isnumber(t.exponent))
+end
 
 -- Cache values in locals for faster code execution
 local math = math
 local math_floor = math.floor
 local math_Round = math.Round
 local math_ceil = math.ceil
+local math_Clamp = math.Clamp
+local math_IsNearlyEqual = math.IsNearlyEqual
 local math_log10 = math.log10
 local math_min = math.min
 local math_max = math.max
@@ -21,6 +39,7 @@ local math_abs = math.abs
 local math_exp = math.exp
 local math_huge = math.huge
 local tonumber = tonumber
+local isinfnumber = isinfnumber
 
 local MAX_NUMBER = 1.7976931348623e308
 local MAX_NUMBER_mantissa = 1.7976931348623
@@ -28,7 +47,7 @@ local MAX_NUMBER_exponent = 308
 
 -- infmath
 function infmath.ConvertNumberToInfNumber(number)
-    if istable(number) then return number end
+    if isinfnumber(number) then return number end
     return InfNumber(number)
 end
 
@@ -45,9 +64,10 @@ local ConvertNumberToInfNumber = infmath.ConvertNumberToInfNumber
 local ConvertInfNumberToNormalNumber = infmath.ConvertInfNumberToNormalNumber
 
 local function FixMantissa(self) -- Just in case.
-    if !istable(self) then return end
+    if !isinfnumber(self) then return end
 
-    local m = self.mantissa
+    local negative = self.mantissa < 0
+    local m = math_abs(self.mantissa)
     if m == math_huge then
         m = MAX_NUMBER_mantissa
         self.exponent = self.exponent + MAX_NUMBER_exponent
@@ -56,13 +76,13 @@ local function FixMantissa(self) -- Just in case.
         m = m / (10^e)
         self.exponent = self.exponent + e
     end
-    self.mantissa = m
+    self.mantissa = m*(negative and -1 or 1)
 
     return self
 end
 
 local function FixExponent(self) -- Just in case.
-    if !istable(self) then return end
+    if !isinfnumber(self) then return end
 
     if self.exponent ~= math_floor(self.exponent) then
         self.mantissa = self.mantissa * 10^(self.exponent - math_floor(self.exponent))
@@ -75,6 +95,8 @@ end
 local function FixMantissaExponent(self)
     FixMantissa(self)
     FixExponent(self)
+
+    return self
 end
 
 t.log = function(self, x)
@@ -86,18 +108,24 @@ end
 t.FormatText = function(self, roundto) -- Use Scientific notation
     local e = self.exponent
     local e_negative = e < 0
-    return e > -2 and e < 9 and self.mantissa * 10^e or
-    math_Round(self.mantissa, roundto or 14).."e"..(e_negative and "-" or "+")..(math_abs(e) >= 1e9 and "e"..math_Round(math_log10(math_abs(e)), 2) or math.abs(e))
+    if e > -2 and e < 9 then return math_Round(self.mantissa * 10^e, 7) end -- Normal notation
+    local round = roundto or math_min(3, 8-math_floor(math_log10(e)))
+
+    return (round >= 0 and math_Round(self.mantissa, round) or "").."e"..(
+    infmath.usealtnotation and (e_negative and "-" or "")..(math_abs(e) >= 1e9 and "e"..math_Round(math_log10(math_abs(e)), 2) or math_abs(e)) or
+    (e_negative and "-" or "")..(math_abs(e) >= 1e9 and math_Round(e * 10^-math_floor(math_log10(e)), 3).."e"..math_floor(math_log10(math_abs(e))) or math_abs(e)))
 end
+meta.FormatText = t.FormatText
 
 t.add = function(self, tbl)
     self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
 
 
-    self.mantissa = self.mantissa + tbl.mantissa/(10^(self.exponent-tbl.exponent))
-    
-    FixMantissaExponent(self)
+    self.mantissa = self.mantissa + tbl.mantissa/(10^math_Clamp(self.exponent-tbl.exponent, -20, 20))
+    FixMantissa(self)
+    self.exponent = math_max(self.exponent, tbl.exponent)
+    FixExponent(self)
     return self
 end
 meta.__add = t.add
@@ -107,9 +135,8 @@ t.sub = function(self, tbl)
     tbl = ConvertNumberToInfNumber(tbl)
 
 
-    self.mantissa = self.mantissa - tbl.mantissa/(10^(self.exponent-tbl.exponent))
-    
-    FixMantissaExponent(self)
+    self.mantissa = self.mantissa - tbl.mantissa/(10^math_Clamp(self.exponent-tbl.exponent, -20, 20))
+    FixMantissa(self)
     return self
 end
 meta.__sub = t.sub
@@ -151,9 +178,9 @@ t.pow = function(self, tbl) -- Power (normal numbers only, very complicated to c
     if infmath_pow_useloop then
         -- Expensive loop. But couldn't help it *shrug*
         for i=1,math_min(n, 1e6),308 do
-            if math.IsNearlyEqual(self.mantissa, 1) then break end
-            self.mantissa = self.mantissa * (m ^ math.min(308, n-i))
-            FixMantissaExponent(self)
+            if math_IsNearlyEqual(self.mantissa, 1) then break end
+            self.mantissa = self.mantissa * (m ^ math_min(308, n-i))
+            FixMantissa(self)
         end
 
         self.exponent = (self.exponent-e) + e*n
@@ -168,10 +195,12 @@ t.pow = function(self, tbl) -- Power (normal numbers only, very complicated to c
 end
 meta.__pow = t.pow
 
-t.tet = function(self, number) -- Tetration (normal numbers! far more complicated than pow function)
+-- Tetration
+t.tet = function(self, number)
     local original_number = ConvertInfNumberToNormalNumber(self)
     for i=1,math_ceil(math_min(number-1, 100)) do
-        local c = math.min(1, 0.1+(number-i)*0.9)
+        -- local c = math_min(1, number-i)
+        local c = math_min(1, (0.1+(number-i)*0.9))
         local calc_ognumber = ConvertNumberToInfNumber(original_number)
 
         local a = (self^c)
@@ -220,14 +249,12 @@ function t:Create(n)
   return base
 end
 
--- Repeatedly calling this function multiple times may impact the performance.
+-- Repeatedly calling this function multiple times may impact the performance. (I think.)
 function InfNumber(mantissa, exponent)
     mantissa = mantissa or 0
     exponent = exponent or 0
-    -- local tbl = table.Copy(t)
+
     local tbl = t:Create()
-    -- print(setmetatable(tbl, meta))
-    -- print(type(tbl))
 
     if mantissa == math_huge then
         mantissa = MAX_NUMBER_mantissa
@@ -260,6 +287,28 @@ infmath.FormatText = t.FormatText
 infmath.exp = function(x)
     local t = InfNumber(math_exp(1))
     t:pow(x)
+
+    return t
+end
+
+infmath.floor = function(self)
+    local e = 10^math.Clamp(self.exponent, -50, 50)
+    local m = math_floor(self.mantissa*e)/e
+    self.mantissa = m
+
+    return t
+end
+
+infmath.ceil = function(self)
+    local e = 10^math.Clamp(self.exponent, -50, 50)
+    local m = math_ceil(self.mantissa*e)/e
+    self.mantissa = m
+
+    return t
+end
+
+infmath.Round = function(self, round)
+    self.mantissa = math_Round(self.mantissa, math_Clamp(self.exponent+(round or 0),-50,50))
 
     return t
 end
@@ -379,18 +428,18 @@ concommand.Add("breakinfinity_testincrement_test", function()
 
     t = t + 1
     print("Test "..t..": 10^^2")
-    local test = InfNumber(1, 1) test:tet(2) -- how do i use this lol
-    print(test:FormatText())
+    local test = InfNumber(1, 1)
+    print(test:tet(2):FormatText())
 
     t = t + 1
     print("Test "..t..": 10^^3")
-    local test = InfNumber(1, 1) test:tet(3)
-    print(test:FormatText())
+    local test = InfNumber(1, 1)
+    print(test:tet(3):FormatText())
 
     t = t + 1
     print("Test "..t..": 10^^4")
-    local test = InfNumber(1, 1) test:tet(4)
-    print(test:FormatText())
+    local test = InfNumber(1, 1)
+    print(test:tet(4):FormatText())
 
     t = t + 1
     print("Test "..t..": 256^256")
@@ -415,6 +464,11 @@ concommand.Add("breakinfinity_testincrement_test", function()
     t = t + 1
     print("Test "..t..": 4.20e-69^5")
     local test = InfNumber(4.20, -69) ^ 5
+    print(test:FormatText())
+
+    t = t + 1
+    print("Test "..t..": 4.20e-69^10")
+    local test = InfNumber(4.20, -69) ^ 10
     print(test:FormatText())
 
     t = t + 1
