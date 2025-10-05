@@ -3,7 +3,11 @@ local meta = {}
 meta.__index = t
 
 infmath = {}
-infmath.Version = "0.4"
+infmath.Version = "0.5"
+infmath.pow_useloop = CreateConVar("infmath_pow_useloop", "0", FCVAR_ARCHIVE + FCVAR_REPLICATED, "Use the loops for power function to determine a more precise? Warning: Has a significant impact on performance."):GetBool()
+cvars.AddChangeCallback("infmath_pow_useloop", function(cvar, old, new)
+    infmath.pow_useloop = tobool(new)
+end, "infmath_pow_useloop")
 
 -- Cache values in locals for faster code execution
 local math = math
@@ -140,8 +144,24 @@ t.pow = function(self, tbl) -- Power (normal numbers only, very complicated to c
     self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
 
-    self.mantissa = self.mantissa ^ ConvertInfNumberToNormalNumber(tbl)
-    self.exponent = (self.exponent)*ConvertInfNumberToNormalNumber(tbl)
+    local n = ConvertInfNumberToNormalNumber(tbl)
+    local m, e = self.mantissa, self.exponent
+    local infmath_pow_useloop = infmath.pow_useloop
+
+    if infmath_pow_useloop then
+        -- Expensive loop. But couldn't help it *shrug*
+        for i=1,math_min(n, 1e6),308 do
+            if math.IsNearlyEqual(self.mantissa, 1) then break end
+            self.mantissa = self.mantissa * (m ^ math.min(308, n-i))
+            FixMantissaExponent(self)
+        end
+
+        self.exponent = (self.exponent-e) + e*n
+    else
+        self.mantissa = self.mantissa ^ n
+        self.exponent = (self.exponent)*n
+    end
+
     FixMantissaExponent(self)
 
     return self
@@ -149,16 +169,20 @@ end
 meta.__pow = t.pow
 
 t.tet = function(self, number) -- Tetration (normal numbers! far more complicated than pow function)
-    local original_number = InfNumber(self.mantissa, self.exponent)
+    local original_number = ConvertInfNumberToNormalNumber(self)
     for i=1,math_ceil(math_min(number-1, 100)) do
-        local c = math.min(1, number-i)
+        local c = math.min(1, 0.1+(number-i)*0.9)
+        local calc_ognumber = ConvertNumberToInfNumber(original_number)
 
-        self = original_number^self -- HOW DOES THIS WORK!?!?!?
-        -- print(self:FormatText(), original_number:FormatText())
+        local a = (self^c)
+        self = calc_ognumber^a
+        -- self = a^calc_ognumber
 
         FixMantissaExponent(self)
         if self.exponent == math_huge then break end
     end
+
+    return self
 end
 
 t.eq = function(self, tbl)
@@ -245,6 +269,7 @@ end
 print("Break Infinity v"..infmath.Version.." loaded and initialized!")
 -- print("Break Infinity MetaTable Type: "..TYPE_INFNUMBER)
 
+if net then
 -- Same as net.WriteTable and net.ReadTable, but with small differences to make it a bit optimized
 function net.WriteInfNumber(tbl)
     tbl = ConvertNumberToInfNumber(tbl)
@@ -266,12 +291,14 @@ function net.ReadInfNumber()
     }
     return InfNumber(t.mantissa, t.exponent)
 end
+end
 
 local m = FindMetaTable("CTakeDamageInfo")
-
-m.old_SetDamage = m.old_SetDamage or m.SetDamage
-m.SetDamage = function(self, tbl)
-    self:old_SetDamage(ConvertInfNumberToNormalNumber(tbl))
+if m then
+    m.old_SetDamage = m.old_SetDamage or m.SetDamage
+    m.SetDamage = function(self, tbl)
+        self:old_SetDamage(ConvertInfNumberToNormalNumber(tbl))
+    end
 end
 
 if SERVER then return end
@@ -364,6 +391,11 @@ concommand.Add("breakinfinity_testincrement_test", function()
     print("Test "..t..": 10^^4")
     local test = InfNumber(1, 1) test:tet(4)
     print(test:FormatText())
+
+    t = t + 1
+    print("Test "..t..": 256^256")
+    local test = InfNumber(2.56, 2)
+    print((test^test):FormatText())
 
     t = t + 1
     print("Test "..t..": 1.62e800-6.66e799")
