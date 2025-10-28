@@ -6,27 +6,28 @@ meta.__tostring = function(t)
 end
 -- global
 infmath = {}
-infmath.Version = "0.6"
-infmath.pow_useloop = CreateConVar("infmath_pow_useloop", "0", FCVAR_ARCHIVE + FCVAR_REPLICATED, "Use the loops for power function to determine a more precise? Warning: Has a significant impact on performance."):GetBool()
-cvars.AddChangeCallback("infmath_pow_useloop", function(cvar, old, new)
-    infmath.pow_useloop = tobool(new)
-    if SERVER then
-        BroadcastLua([[infmath.pow_useloop = ]]..tostring(infmath.pow_useloop))
-    end
-end, "infmath_pow_useloop")
-infmath.usealtnotation = CreateConVar("infmath_usealtnotation", "0", FCVAR_ARCHIVE + FCVAR_REPLICATED, "Use the loops for power function to determine a more precise? Warning: Has a significant impact on performance."):GetBool()
-cvars.AddChangeCallback("infmath_usealtnotation", function(cvar, old, new)
-    infmath.usealtnotation = tobool(new)
-    BroadcastLua([[infmath.usealtnotation = ]]..tostring(infmath.usealtnotation))
-end, "infmath_usealtnotation")
+infmath.Version = "0.7"
+infmath.usenotation = "scientific"
+--[[ Valid notations:
+scientific
+infinity
+]]
+infmath.useexponentnotationtype = 1
+--[[valid exponent notation types:
+1 - "e[exponent]"
+2 - "ee[log10(exponent)]"
+]]
 
 local istable = istable
+local isnumber = isnumber
 function isinfnumber(t)
     return tobool(istable(t) and isnumber(t.mantissa) and isnumber(t.exponent))
 end
 
 -- Cache values in locals for faster code execution
+local infmath = infmath
 local math = math
+
 local math_floor = math.floor
 local math_Round = math.Round
 local math_ceil = math.ceil
@@ -45,6 +46,40 @@ local MAX_NUMBER = 1.7976931348623e308
 local MAX_NUMBER_mantissa = 1.7976931348623
 local MAX_NUMBER_exponent = 308
 
+if not math.Clamp then
+    function math.Clamp(_in, low, high)
+    	return math_min(math_max(_in, low), high)
+    end
+    math_Clamp = math.Clamp
+end
+
+if not math.Round then
+    function math.Round(num, idp)
+	    local mult = 10 ^ (idp or 0)
+	    return math_floor(num * mult + 0.5) / mult
+    end
+    math_Round = math.Round
+end
+
+if not istable then
+    function istable(var)
+        return type(var) == "table"
+    end
+end
+
+if not isnumber then
+    function isnumber(var)
+        return type(var) == "number"
+    end
+end
+
+if not tobool then
+    function tobool(var)
+        return var and true or false
+    end
+end
+
+
 -- infmath
 function infmath.ConvertNumberToInfNumber(number)
     if isinfnumber(number) then return number end
@@ -59,12 +94,13 @@ end
 -- Placeholder values
 t.mantissa = 0
 t.exponent = 0
+-- t.layers = 0 -- Break eternity when?
 
 local ConvertNumberToInfNumber = infmath.ConvertNumberToInfNumber
 local ConvertInfNumberToNormalNumber = infmath.ConvertInfNumberToNormalNumber
 
 local function FixMantissa(self) -- Just in case.
-    if !isinfnumber(self) then return end
+    if not isinfnumber(self) then return end
 
     local negative = self.mantissa < 0
     local m = math_abs(self.mantissa)
@@ -82,7 +118,7 @@ local function FixMantissa(self) -- Just in case.
 end
 
 local function FixExponent(self) -- Just in case.
-    if !isinfnumber(self) then return end
+    if not isinfnumber(self) then return end
 
     if self.exponent ~= math_floor(self.exponent) then
         self.mantissa = self.mantissa * 10^(self.exponent - math_floor(self.exponent))
@@ -107,13 +143,22 @@ t.log10 = function(self)
 end
 t.FormatText = function(self, roundto) -- Use Scientific notation
     local e = self.exponent
+    if e == -math_huge then return "0" end
+    if e == math_huge then return "inf" end
     local e_negative = e < 0
-    if e > -2 and e < 9 then return math_Round(self.mantissa * 10^e, 7) end -- Normal notation
-    local round = roundto or math_min(3, 8-math_floor(math_log10(e)))
 
-    return (round >= 0 and math_Round(self.mantissa, round) or "").."e"..(
-    infmath.usealtnotation and (e_negative and "-" or "")..(math_abs(e) >= 1e9 and "e"..math_Round(math_log10(math_abs(e)), 2) or math_abs(e)) or
-    (e_negative and "-" or "")..(math_abs(e) >= 1e9 and math_Round(e * 10^-math_floor(math_log10(e)), 3).."e"..math_floor(math_log10(math_abs(e))) or math_abs(e)))
+    if infmath.usenotation == "scientific" then
+        if e > -2 and e < 9 then return math_Round(self.mantissa * 10^e, 7) end -- Normal numbers
+        local round = roundto or math_min(3, 8-math_floor(math_log10(e)))
+
+        return (round >= 0 and math_Round(self.mantissa, round) or "").."e"..(
+        infmath.useexponentnotationtype == 2 and (e_negative and "-" or "")..(math_abs(e) >= 1e9 and "e"..math_Round(math_log10(math_abs(e)), 2) or math_abs(e)) or
+        (e_negative and "-" or "")..(math_abs(e) >= 1e9 and math_Round(e * 10^-math_floor(math_log10(e)), 3).."e"..math_floor(math_log10(math_abs(e))) or math_abs(e)))    
+    elseif infmath.usenotation == "infinity" then
+        return math_Round(self:log10() / 308.25471555992, math_min(4, 10-math_log10(math_max(1, math_abs(e))))).."∞"
+    end
+
+    return "NaN"
 end
 meta.FormatText = t.FormatText
 
@@ -173,21 +218,11 @@ t.pow = function(self, tbl) -- Power (normal numbers only, very complicated to c
 
     local n = ConvertInfNumberToNormalNumber(tbl)
     local m, e = self.mantissa, self.exponent
-    local infmath_pow_useloop = infmath.pow_useloop
+    local power = math_log10(m) * n
 
-    if infmath_pow_useloop then
-        -- Expensive loop. But couldn't help it *shrug*
-        for i=1,math_min(n, 1e6),308 do
-            if math_IsNearlyEqual(self.mantissa, 1) then break end
-            self.mantissa = self.mantissa * (m ^ math_min(308, n-i))
-            FixMantissa(self)
-        end
-
-        self.exponent = (self.exponent-e) + e*n
-    else
-        self.mantissa = self.mantissa ^ n
-        self.exponent = (self.exponent)*n
-    end
+    self.mantissa = 10^(power-math_floor(power))
+    local log_value = math_log10(m) + e
+    self.exponent = math_floor(log_value*math_floor(n))
 
     FixMantissaExponent(self)
 
@@ -259,11 +294,13 @@ function InfNumber(mantissa, exponent)
     if mantissa == math_huge then
         mantissa = MAX_NUMBER_mantissa
         exponent = exponent + MAX_NUMBER_exponent
+    elseif mantissa == 0 then
+        mantissa = 0
+        exponent = 0
     elseif mantissa >= 10 or mantissa < 1 then
         local e = math_floor(math_log10(mantissa))
         mantissa = mantissa / (10^e)
         exponent = exponent + e
-
     end
 
     tbl.mantissa = mantissa
@@ -320,7 +357,7 @@ print("Break Infinity v"..infmath.Version.." loaded and initialized!")
 
 if net then
 -- Same as net.WriteTable and net.ReadTable, but with small differences to make it a bit optimized
-function net.WriteInfNumber(tbl)
+  function net.WriteInfNumber(tbl)
     tbl = ConvertNumberToInfNumber(tbl)
 
     net.WriteDouble(tbl.mantissa)
@@ -331,26 +368,28 @@ function net.WriteInfNumber(tbl)
         exponent = tbl.exponent,
     })
 ]]
-end
+  end
 
-function net.ReadInfNumber()
+  function net.ReadInfNumber()
     local t = {
         mantissa = net.ReadDouble(),
         exponent = net.ReadDouble(),
     }
     return InfNumber(t.mantissa, t.exponent)
-end
+  end
 end
 
-local m = FindMetaTable("CTakeDamageInfo")
-if m then
+if FindMetaTable then
+  local m = FindMetaTable("CTakeDamageInfo")
+  if m then
     m.old_SetDamage = m.old_SetDamage or m.SetDamage
     m.SetDamage = function(self, tbl)
-        self:old_SetDamage(ConvertInfNumberToNormalNumber(tbl))
+      self:old_SetDamage(ConvertInfNumberToNormalNumber(tbl))
     end
+  end
 end
 
-if SERVER then return end
+if SERVER or not concommand then return end
 local handler = "BREAKINF.TestIncrement"
 local n
 concommand.Add("breakinfinity_testincrement_add", function()
