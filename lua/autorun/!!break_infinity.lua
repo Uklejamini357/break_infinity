@@ -6,7 +6,7 @@ meta.__tostring = function(t)
 end
 -- global
 infmath = {}
-infmath.Version = "0.7"
+infmath.Version = "0.8"
 infmath.usenotation = "scientific"
 --[[ Valid notations:
 scientific
@@ -82,7 +82,7 @@ end
 
 -- infmath
 function infmath.ConvertNumberToInfNumber(number)
-    if isinfnumber(number) then return number end
+    if isinfnumber(number) then return InfNumber(number.mantissa, number.exponent) end
     return InfNumber(number)
 end
 
@@ -141,7 +141,7 @@ end
 t.log10 = function(self)
     return math_log10(self.mantissa) + self.exponent
 end
-t.FormatText = function(self, roundto) -- Use Scientific notation
+t.FormatText = function(self, roundto)
     local e = self.exponent
     if e == -math_huge then return "0" end
     if e == math_huge then return "inf" end
@@ -153,12 +153,25 @@ t.FormatText = function(self, roundto) -- Use Scientific notation
 
         return (round >= 0 and math_Round(self.mantissa, round) or "").."e"..(
         infmath.useexponentnotationtype == 2 and (e_negative and "-" or "")..(math_abs(e) >= 1e9 and "e"..math_Round(math_log10(math_abs(e)), 2) or math_abs(e)) or
-        (e_negative and "-" or "")..(math_abs(e) >= 1e9 and math_Round(e * 10^-math_floor(math_log10(e)), 3).."e"..math_floor(math_log10(math_abs(e))) or math_abs(e)))    
+        (e_negative and "-" or "")..(math_abs(e) >= 1e9 and math_Round(e * 10^-math_floor(math_log10(math_abs(e))), 3).."e"..math_floor(math_log10(math_abs(e))) or math_abs(e)))    
     elseif infmath.usenotation == "infinity" then
         return math_Round(self:log10() / 308.25471555992, math_min(4, 10-math_log10(math_max(1, math_abs(e))))).."∞"
     end
 
     return "NaN"
+end
+meta.FormatText = t.FormatText
+
+t.DefaultFormat = function(self, roundto) -- Best use for data saving as string!
+    local e = self.exponent
+    local e_negative = e < 0
+
+    if e > -5 and e < 14 then return self.mantissa * 10^e end
+    -- local round = math_floor(math_log10(e))
+
+    return self.mantissa.."e"..(
+    --(e_negative and "-" or "")..
+    (math_abs(e) >= 1e9 and e * 10^-math_floor(math_log10(math_abs(e))).."e"..math_floor(math_log10(math_abs(e))) or e))
 end
 meta.FormatText = t.FormatText
 
@@ -310,11 +323,9 @@ function InfNumber(mantissa, exponent)
 end
 
 function ConvertStringToInfNumber(str)
-
     local t = string.Explode("e", str)
-    local mantissa = tonumber(t[1])
+    local mantissa = tonumber(t[1]) or 1
     local exponent = tonumber(t[2] == "" and 10^t[3] or t[2])
-
 
     return InfNumber(mantissa, exponent)
 end
@@ -353,7 +364,6 @@ end
 
 
 print("Break Infinity v"..infmath.Version.." loaded and initialized!")
--- print("Break Infinity MetaTable Type: "..TYPE_INFNUMBER)
 
 if net then
 -- Same as net.WriteTable and net.ReadTable, but with small differences to make it a bit optimized
@@ -371,10 +381,10 @@ if net then
   end
 
   function net.ReadInfNumber()
-    local t = {
-        mantissa = net.ReadDouble(),
-        exponent = net.ReadDouble(),
-    }
+    local t = {}
+    t.mantissa = net.ReadDouble()
+    t.exponent = net.ReadDouble()
+
     return InfNumber(t.mantissa, t.exponent)
   end
 end
@@ -392,41 +402,7 @@ end
 if SERVER or not concommand then return end
 local handler = "BREAKINF.TestIncrement"
 local n
-concommand.Add("breakinfinity_testincrement_add", function()
-    n = InfNumber(1, 0)
-    print(n:FormatText())
-    timer.Create(handler, 0, 0, function()
-        n = n + n
-        print(n:FormatText())
-        if n.exponent == math_huge then timer.Remove(handler) end
-    end)
-end)
-concommand.Add("breakinfinity_testincrement_mul", function()
-    n = InfNumber(2, 0)
-    print(n:FormatText())
-    timer.Create(handler, 0, 0, function()
-        n = n * n
-        print(n:FormatText())
-        if n.exponent == math_huge then timer.Remove(handler) end
-    end)
-end)
-concommand.Add("breakinfinity_testincrement_pow", function(_, _, args)
-    n = InfNumber(2, 0)
-    print(n:FormatText())
-    timer.Create(handler, 0, 0, function()
-        n = n ^ (tonumber(args[1]) or 2)
-        print(n:FormatText())
-        if n.exponent == math_huge then timer.Remove(handler) end
-    end)
-end)
 concommand.Add("breakinfinity_testincrement_tet", function(_, _, args)
-    n = InfNumber(2, 0)
-    print(n:FormatText())
-    timer.Create(handler, 0, 0, function()
-        n:tet(tonumber(args[1]) or 2)
-        print(n:FormatText())
-        if n.exponent == math_huge then timer.Remove(handler) end
-    end)
 end)
 
 concommand.Add("breakinfinity_testincrement_stop", function()
@@ -434,18 +410,10 @@ concommand.Add("breakinfinity_testincrement_stop", function()
 end)
 
 concommand.Add("breakinfinity_testincrement_increase", function(_, _, args)
-    n = InfNumber(1, 0)
-
-    print(n:FormatText())
-    timer.Create(handler, 0, 0, function()
-        n = ((n*n)^2)+1
-        print(n:FormatText())
-        if n.exponent == math_huge then timer.Remove(handler) end
-    end)
 end)
 
 
-concommand.Add("breakinfinity_testincrement_test", function()
+concommand.Add("breakinfinity_test", function(_,_,args)
     local t = 0
     local test = 0
 
@@ -519,4 +487,50 @@ concommand.Add("breakinfinity_testincrement_test", function()
     print("Test "..t..": 4.20e609<1e1000")
     local test = InfNumber(4.20, 609) < InfNumber(1, 1000)
     print(test)
+end)
+
+concommand.Add("breakinfinity_increment_test", function(_,_,args)
+    local str = args[1]
+    if str == "add" then
+        n = InfNumber(1, 0)
+        print(n:FormatText())
+        timer.Create(handler, 0, 0, function()
+            n = n + (n/3)
+            print(n:FormatText())
+            if n.exponent == math_huge then timer.Remove(handler) end
+        end)
+    elseif str == "mul" then
+        n = InfNumber(2, 0)
+        print(n:FormatText())
+        timer.Create(handler, 0, 0, function()
+            n = n * n
+            print(n:FormatText())
+            if n.exponent == math_huge then timer.Remove(handler) end
+        end)
+    elseif str == "pow" then
+        n = InfNumber(2, 0)
+        print(n:FormatText())
+        timer.Create(handler, 0, 0, function()
+            n = n ^ (tonumber(args[1]) or 2)
+            print(n:FormatText())
+            if n.exponent == math_huge then timer.Remove(handler) end
+        end)
+    elseif str == "tetration" then
+        n = InfNumber(2, 0)
+        print(n:FormatText())
+        timer.Create(handler, 0, 0, function()
+            n:tet(tonumber(args[1]) or 2)
+            print(n:FormatText())
+            if n.exponent == math_huge then timer.Remove(handler) end
+        end)
+    elseif str == "increase" then
+        n = InfNumber(1, 0)
+
+        print(n:FormatText())
+        timer.Create(handler, 0, 0, function()
+            n = ((n*n)^2)+1
+            print(n:FormatText())
+            if n.exponent == math_huge then timer.Remove(handler) end
+        end)
+    end
 end)
