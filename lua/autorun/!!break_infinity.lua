@@ -4,9 +4,16 @@ meta.__index = t
 meta.__tostring = function(t)
     return t:FormatText()
 end
+
+--[[
+meta.__newindex = function(self, key, value)
+    rawset(self, key, value)
+end
+]]
+
 -- global
 infmath = {}
-infmath.Version = "0.8"
+infmath.Version = "0.9"
 infmath.usenotation = "scientific"
 --[[ Valid notations:
 scientific
@@ -42,9 +49,14 @@ local math_huge = math.huge
 local tonumber = tonumber
 local isinfnumber = isinfnumber
 
-local MAX_NUMBER = 1.7976931348623e308
+MAX_NUMBER = 1.7976931348623e308
+local MAX_NUMBER = MAX_NUMBER
 local MAX_NUMBER_mantissa = 1.7976931348623
 local MAX_NUMBER_exponent = 308
+
+infmath.MAX_NUMBER = MAX_NUMBER
+infmath.MAX_NUMBER_mantissa = MAX_NUMBER_mantissa
+infmath.MAX_NUMBER_exponent = MAX_NUMBER_exponent
 
 if not math.Clamp then
     function math.Clamp(_in, low, high)
@@ -107,8 +119,10 @@ local function FixMantissa(self) -- Just in case.
     if m == math_huge then
         m = MAX_NUMBER_mantissa
         self.exponent = self.exponent + MAX_NUMBER_exponent
+    elseif m == 0 then
+        self.exponent = 0
     elseif m >= 10 or m < 1 then
-        local e = math_floor(math_log10(self.mantissa))
+        local e = math_floor(math_log10(m))
         m = m / (10^e)
         self.exponent = self.exponent + e
     end
@@ -143,19 +157,23 @@ t.log10 = function(self)
 end
 t.FormatText = function(self, roundto)
     local e = self.exponent
+    local abs_e = e
     if e == -math_huge then return "0" end
     if e == math_huge then return "inf" end
     local e_negative = e < 0
+    if e_negative then
+        abs_e = math_abs(abs_e)
+    end
 
     if infmath.usenotation == "scientific" then
         if e > -2 and e < 9 then return math_Round(self.mantissa * 10^e, 7) end -- Normal numbers
-        local round = roundto or math_min(3, 8-math_floor(math_log10(e)))
+        local round = roundto or math_min(3, 8-math_floor(math_log10(abs_e)))
 
-        return (round >= 0 and math_Round(self.mantissa, round) or "").."e"..(
-        infmath.useexponentnotationtype == 2 and (e_negative and "-" or "")..(math_abs(e) >= 1e9 and "e"..math_Round(math_log10(math_abs(e)), 2) or math_abs(e)) or
-        (e_negative and "-" or "")..(math_abs(e) >= 1e9 and math_Round(e * 10^-math_floor(math_log10(math_abs(e))), 3).."e"..math_floor(math_log10(math_abs(e))) or math_abs(e)))    
+        return (round >= 0 and self.mantissa or "").."e"..(
+        infmath.useexponentnotationtype == 2 and (e_negative and "-" or "")..(abs_e >= 1e9 and "e"..math_Round(math_log10(abs_e), 2) or abs_e) or
+        (e_negative and "-" or "")..(abs_e >= 1e9 and math_Round(abs_e * 10^-math_floor(math_log10(abs_e)), 3).."e"..math_floor(math_log10(abs_e)) or abs_e))    
     elseif infmath.usenotation == "infinity" then
-        return math_Round(self:log10() / 308.25471555992, math_min(4, 10-math_log10(math_max(1, math_abs(e))))).."∞"
+        return math_Round(self:log10() / 308.25471555992, math_min(4, 10-math_log10(math_max(1, abs_e)))).."∞"
     end
 
     return "NaN"
@@ -173,15 +191,18 @@ t.DefaultFormat = function(self, roundto) -- Best use for data saving as string!
     --(e_negative and "-" or "")..
     (math_abs(e) >= 1e9 and e * 10^-math_floor(math_log10(math_abs(e))).."e"..math_floor(math_log10(math_abs(e))) or e))
 end
-meta.FormatText = t.FormatText
+meta.DefaultFormat = t.DefaultFormat
 
 t.add = function(self, tbl)
     self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
+    if tbl.mantissa == 0 then return self end
 
 
-    self.mantissa = self.mantissa + tbl.mantissa/(10^math_Clamp(self.exponent-tbl.exponent, -20, 20))
+    local a = 10^math_Clamp(self.exponent-tbl.exponent, -300, 300)
+    self.mantissa = self.mantissa == 0 and tbl.mantissa or (self.mantissa + tbl.mantissa/a)
     FixMantissa(self)
+    if self.exponent == -math_huge then return self end
     self.exponent = math_max(self.exponent, tbl.exponent)
     FixExponent(self)
     return self
@@ -191,10 +212,17 @@ meta.__add = t.add
 t.sub = function(self, tbl)
     self = ConvertNumberToInfNumber(self)
     tbl = ConvertNumberToInfNumber(tbl)
+    if tbl.mantissa == 0 then return self end
 
 
-    self.mantissa = self.mantissa - tbl.mantissa/(10^math_Clamp(self.exponent-tbl.exponent, -20, 20))
+    local a = 10^math_Clamp(self.exponent-tbl.exponent, -300, 300)
+    self.mantissa = self.mantissa == 0 and -tbl.mantissa or (self.mantissa - tbl.mantissa/a)
     FixMantissa(self)
+    if self.exponent == -math_huge then return self end
+    
+    self.exponent = math_max(self.exponent, tbl.exponent)
+    if self.mantissa == tbl.mantissa and self.expontnt == tbl.exponent then self.exponent = 0 end
+    FixExponent(self)
     return self
 end
 meta.__sub = t.sub
@@ -231,11 +259,11 @@ t.pow = function(self, tbl) -- Power (normal numbers only, very complicated to c
 
     local n = ConvertInfNumberToNormalNumber(tbl)
     local m, e = self.mantissa, self.exponent
-    local power = math_log10(m) * n
+    -- local power = math_log10(m) * n
 
-    self.mantissa = 10^(power-math_floor(power))
-    local log_value = math_log10(m) + e
-    self.exponent = math_floor(log_value*math_floor(n))
+    self.mantissa = 1--10^(power-math_floor(power))
+    -- local log_value = math_log10(m) + e
+    self.exponent = (math_log10(m) + e)*n
 
     FixMantissaExponent(self)
 
@@ -299,11 +327,12 @@ end
 
 -- Repeatedly calling this function multiple times may impact the performance. (I think.)
 function InfNumber(mantissa, exponent)
-    mantissa = mantissa or 0
+    local negative = mantissa < 0
+
+    mantissa = math_abs(mantissa or 0)
     exponent = exponent or 0
 
     local tbl = t:Create()
-
     if mantissa == math_huge then
         mantissa = MAX_NUMBER_mantissa
         exponent = exponent + MAX_NUMBER_exponent
@@ -316,7 +345,7 @@ function InfNumber(mantissa, exponent)
         exponent = exponent + e
     end
 
-    tbl.mantissa = mantissa
+    tbl.mantissa = mantissa*(negative and -1 or 1)
     tbl.exponent = exponent
 
     return tbl
@@ -334,36 +363,63 @@ infmath.FormatText = t.FormatText
 
 infmath.exp = function(x)
     local t = InfNumber(math_exp(1))
-    t:pow(x)
+    t = t ^ x
 
     return t
+end
+
+infmath.abs = function(self)
+    return InfNumber(math_abs(self.mantissa), self.exponent)
 end
 
 infmath.floor = function(self)
+    if not isinfnumber(self) then return math_floor(self) end
     local e = 10^math.Clamp(self.exponent, -50, 50)
     local m = math_floor(self.mantissa*e)/e
-    self.mantissa = m
 
-    return t
+    return InfNumber(m, self.exponent)
 end
 
 infmath.ceil = function(self)
+    if not isinfnumber(self) then return math_ceil(self) end
     local e = 10^math.Clamp(self.exponent, -50, 50)
     local m = math_ceil(self.mantissa*e)/e
-    self.mantissa = m
 
-    return t
+    return InfNumber(m, self.exponent)
 end
-
-infmath.Round = function(self, round)
-    self.mantissa = math_Round(self.mantissa, math_Clamp(self.exponent+(round or 0),-50,50))
-
-    return t
-end
-
-
 
 print("Break Infinity v"..infmath.Version.." loaded and initialized!")
+
+infmath.Round = function(self, round)
+    if not isinfnumber(self) then return math_Round(self, round) end
+    return InfNumber(math_Round(self.mantissa, math_Clamp(self.exponent+(round or 0),-50,50)), self.exponent)
+end
+
+infmath.min = function(...)
+    local m = {}
+    for k,v in pairs({...}) do
+        table.insert(m, isinfnumber(v) and v:log10() or math.log10(v))
+    end
+    return InfNumber(1, math_min(unpack(m)))
+end
+
+infmath.max = function(...)
+    local m = {}
+    for k,v in pairs({...}) do
+        table.insert(m, isinfnumber(v) and v:log10() or math.log10(v))
+    end
+    return InfNumber(1, math_max(unpack(m)))
+end
+
+infmath.Clamp = function(...)
+    local m = {}
+    for k,v in pairs({...}) do
+        table.insert(m, isinfnumber(v) and v:log10() or math.log10(v))
+    end
+    return InfNumber(1, math_max(math_min(unpack(m))))
+end
+
+
 
 if net then
 -- Same as net.WriteTable and net.ReadTable, but with small differences to make it a bit optimized

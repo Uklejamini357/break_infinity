@@ -40,7 +40,7 @@ Maybe in the future...
 # Support:
 - Numbers past 1.79e308: Yes
 - Decimals: Partial
-- Negative numbers: No
+- Negative numbers: Partial
 
 
 # Inspirations:
