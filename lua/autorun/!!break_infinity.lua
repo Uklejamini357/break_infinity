@@ -354,7 +354,7 @@ end
 function ConvertStringToInfNumber(str)
     local t = string.Explode("e", str)
     local mantissa = tonumber(t[1]) or 1
-    local exponent = tonumber(t[2] == "" and 10^t[3] or t[2])
+    local exponent = tonumber(t[2] == "" and 10^t[3] or 10^(t[3] or 0) * (t[2] or 0))
 
     return InfNumber(mantissa, exponent)
 end
